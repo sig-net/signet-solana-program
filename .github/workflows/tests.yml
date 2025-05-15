@@ -1,0 +1,51 @@
+name: Tests
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    paths:
+      - ".github/workflows/**/*.yml"
+      - "signet-program/**"
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Install Solana CLI
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/v2.1.21/install)"
+          export PATH="/home/runner/.local/share/solana/install/active_release/bin:$PATH"
+
+      - name: Install AVM
+        run: cargo install --git https://github.com/coral-xyz/anchor avm --force
+
+      - name: Install Anchor
+        run: |
+          avm install 0.31.1
+          avm use 0.31.1
+
+      - name: Check setup
+        run: |
+          cargo --version
+          rustc --version
+          anchor --version
+          solana --version
+
+      - name: Build project
+        run: cd signet-program && anchor build
+
+      - name: Run tests
+        run: cd signet-program && anchor test

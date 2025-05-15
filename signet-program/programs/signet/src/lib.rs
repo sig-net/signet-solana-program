@@ -4,13 +4,10 @@ use anchor_lang::prelude::*;
 declare_id!("4uvZW8K4g4jBg7dzPNbb9XDxJLFBK7V6iC76uofmYvEU");
 
 #[program]
-pub mod chain_signatures_project {
+pub mod signet {
     use super::*;
 
-    pub fn initialize(
-        ctx: Context<Initialize>,
-        signature_deposit: u64,
-    ) -> Result<()> {
+    pub fn initialize(ctx: Context<Initialize>, signature_deposit: u64) -> Result<()> {
         let program_state = &mut ctx.accounts.program_state;
         program_state.admin = ctx.accounts.admin.key();
         program_state.signature_deposit = signature_deposit;
@@ -37,12 +34,12 @@ pub mod chain_signatures_project {
         let program_state_info = program_state.to_account_info();
         require!(
             program_state_info.lamports() >= amount,
-            ChainSignaturesError::InsufficientFunds
+            SignetError::InsufficientFunds
         );
 
         require!(
             recipient.key() != Pubkey::default(),
-            ChainSignaturesError::InvalidRecipient
+            SignetError::InvalidRecipient
         );
 
         // Transfer funds from program_state to recipient
@@ -77,7 +74,7 @@ pub mod chain_signatures_project {
 
         require!(
             payer.lamports() >= program_state.signature_deposit,
-            ChainSignaturesError::InsufficientDeposit
+            SignetError::InsufficientDeposit
         );
 
         let transfer_instruction = anchor_lang::system_program::Transfer {
@@ -116,7 +113,7 @@ pub mod chain_signatures_project {
     ) -> Result<()> {
         require!(
             request_ids.len() == signatures.len(),
-            ChainSignaturesError::InvalidInputLength
+            SignetError::InvalidInputLength
         );
 
         for i in 0..request_ids.len() {
@@ -171,7 +168,7 @@ pub struct AdminOnly<'info> {
         mut,
         seeds = [b"program-state"],
         bump,
-        has_one = admin @ ChainSignaturesError::Unauthorized
+        has_one = admin @ SignetError::Unauthorized
     )]
     pub program_state: Account<'info, ProgramState>,
     #[account(mut)]
@@ -185,7 +182,7 @@ pub struct WithdrawFunds<'info> {
         mut,
         seeds = [b"program-state"],
         bump,
-        has_one = admin @ ChainSignaturesError::Unauthorized
+        has_one = admin @ SignetError::Unauthorized
     )]
     pub program_state: Account<'info, ProgramState>,
 
@@ -250,7 +247,7 @@ pub struct FundsWithdrawnEvent {
 }
 
 #[error_code]
-pub enum ChainSignaturesError {
+pub enum SignetError {
     #[msg("Insufficient deposit amount")]
     InsufficientDeposit,
     #[msg("Arrays must have the same length")]

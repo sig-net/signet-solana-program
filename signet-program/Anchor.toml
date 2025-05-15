@@ -1,14 +1,15 @@
 [features]
 seeds = false
 
+# TODO: update addresses
 [programs.localnet]
-chain_signatures_project = "4uvZW8K4g4jBg7dzPNbb9XDxJLFBK7V6iC76uofmYvEU"
+signet = "4uvZW8K4g4jBg7dzPNbb9XDxJLFBK7V6iC76uofmYvEU"
 
 [programs.devnet]
-chain_signatures_project = "4uvZW8K4g4jBg7dzPNbb9XDxJLFBK7V6iC76uofmYvEU"
+signet = "4uvZW8K4g4jBg7dzPNbb9XDxJLFBK7V6iC76uofmYvEU"
 
 [programs.testnet]
-chain_signatures_project = "4uvZW8K4g4jBg7dzPNbb9XDxJLFBK7V6iC76uofmYvEU"
+signet = "4uvZW8K4g4jBg7dzPNbb9XDxJLFBK7V6iC76uofmYvEU"
 
 [registry]
 url = "https://anchor.projectserum.com"
