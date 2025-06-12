@@ -1,29 +1,32 @@
 #![allow(unexpected_cfgs)]
 use anchor_lang::prelude::*;
 
-declare_id!("4uvZW8K4g4jBg7dzPNbb9XDxJLFBK7V6iC76uofmYvEU");
+declare_id!("FeHnvX9LPVHtATNN2XssgiVVLYhPf3wLBoAzfYrgkEbp");
 
 #[program]
-pub mod chain_signatures_project {
+pub mod signet {
     use super::*;
 
     pub fn initialize(
         ctx: Context<Initialize>,
         signature_deposit: u64,
+        network_id: String,
     ) -> Result<()> {
         let program_state = &mut ctx.accounts.program_state;
         program_state.admin = ctx.accounts.admin.key();
         program_state.signature_deposit = signature_deposit;
+        program_state.network_id = network_id;
 
         Ok(())
     }
 
     pub fn update_deposit(ctx: Context<AdminOnly>, new_deposit: u64) -> Result<()> {
         let program_state = &mut ctx.accounts.program_state;
+        let old_deposit = program_state.signature_deposit;
         program_state.signature_deposit = new_deposit;
 
         emit!(DepositUpdatedEvent {
-            old_deposit: program_state.signature_deposit,
+            old_deposit,
             new_deposit,
         });
 
@@ -37,12 +40,12 @@ pub mod chain_signatures_project {
         let program_state_info = program_state.to_account_info();
         require!(
             program_state_info.lamports() >= amount,
-            ChainSignaturesError::InsufficientFunds
+            SignetError::InsufficientFunds
         );
 
         require!(
             recipient.key() != Pubkey::default(),
-            ChainSignaturesError::InvalidRecipient
+            SignetError::InvalidRecipient
         );
 
         // Transfer funds from program_state to recipient
@@ -77,7 +80,7 @@ pub mod chain_signatures_project {
 
         require!(
             payer.lamports() >= program_state.signature_deposit,
-            ChainSignaturesError::InsufficientDeposit
+            SignetError::InsufficientDeposit
         );
 
         let transfer_instruction = anchor_lang::system_program::Transfer {
@@ -95,7 +98,7 @@ pub mod chain_signatures_project {
             payload,
             key_version,
             deposit: program_state.signature_deposit,
-            chain_id: 0,
+            network_id: program_state.network_id.clone(),
             path,
             algo,
             dest,
@@ -116,7 +119,7 @@ pub mod chain_signatures_project {
     ) -> Result<()> {
         require!(
             request_ids.len() == signatures.len(),
-            ChainSignaturesError::InvalidInputLength
+            SignetError::InvalidInputLength
         );
 
         for i in 0..request_ids.len() {
@@ -129,12 +132,19 @@ pub mod chain_signatures_project {
 
         Ok(())
     }
+
+    pub fn get_signature_deposit(ctx: Context<GetSignatureDeposit>) -> Result<u64> {
+        let program_state = &ctx.accounts.program_state;
+        Ok(program_state.signature_deposit)
+    }
 }
 
 #[account]
 pub struct ProgramState {
     pub admin: Pubkey,
     pub signature_deposit: u64,
+    /// CAIP-2 Network identifier, e.g. "solana:mainnet", "solana:devnet"
+    pub network_id: String,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
@@ -171,7 +181,7 @@ pub struct AdminOnly<'info> {
         mut,
         seeds = [b"program-state"],
         bump,
-        has_one = admin @ ChainSignaturesError::Unauthorized
+        has_one = admin @ SignetError::Unauthorized
     )]
     pub program_state: Account<'info, ProgramState>,
     #[account(mut)]
@@ -185,7 +195,7 @@ pub struct WithdrawFunds<'info> {
         mut,
         seeds = [b"program-state"],
         bump,
-        has_one = admin @ ChainSignaturesError::Unauthorized
+        has_one = admin @ SignetError::Unauthorized
     )]
     pub program_state: Account<'info, ProgramState>,
 
@@ -216,13 +226,19 @@ pub struct Respond<'info> {
     pub responder: Signer<'info>,
 }
 
+#[derive(Accounts)]
+pub struct GetSignatureDeposit<'info> {
+    #[account(seeds = [b"program-state"], bump)]
+    pub program_state: Account<'info, ProgramState>,
+}
+
 #[event]
 pub struct SignatureRequestedEvent {
     pub sender: Pubkey,
     pub payload: [u8; 32],
     pub key_version: u32,
     pub deposit: u64,
-    pub chain_id: u64,
+    pub network_id: String,
     pub path: String,
     pub algo: String,
     pub dest: String,
@@ -250,7 +266,7 @@ pub struct FundsWithdrawnEvent {
 }
 
 #[error_code]
-pub enum ChainSignaturesError {
+pub enum SignetError {
     #[msg("Insufficient deposit amount")]
     InsufficientDeposit,
     #[msg("Arrays must have the same length")]
