@@ -1,7 +1,10 @@
 [package]
 name = "signet"
 version = "0.1.0"
-description = "SigNet program to request signatures from the network"
+description = "Chain signatures program for cross-chain signing on Solana"
+authors = ["Your Name <your.email@example.com>"]
+license = "MIT"
+repository = "https://github.com/esaminu/chain-signatures-solana"
 edition = "2021"
 
 [lib]
