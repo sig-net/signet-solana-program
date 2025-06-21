@@ -3,6 +3,13 @@ use anchor_lang::prelude::*;
 
 declare_id!("4uvZW8K4g4jBg7dzPNbb9XDxJLFBK7V6iC76uofmYvEU");
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq)]
+#[repr(u8)]
+pub enum SerializationFormat {
+    Borsh = 0,
+    AbiJson = 1,
+}
+
 #[program]
 pub mod chain_signatures_project {
     use super::*;
@@ -97,6 +104,94 @@ pub mod chain_signatures_project {
             algo,
             dest,
             params,
+            fee_payer: match &ctx.accounts.fee_payer {
+                Some(payer) => Some(*payer.key),
+                None => None,
+            },
+        });
+
+        Ok(())
+    }
+
+    pub fn sign_respond(
+        ctx: Context<SignRespond>,
+        transaction: Vec<u8>,
+        slip44_chain_id: u32,
+        key_version: u32,
+        path: String,
+        algo: String,
+        dest: String,
+        params: String,
+        deserialization_format: SerializationFormat,
+        deserialization_schema: Vec<u8>,
+        serialization_format: SerializationFormat,
+        serialization_schema: Vec<u8>,
+    ) -> Result<()> {
+        let program_state = &ctx.accounts.program_state;
+        let requester = &ctx.accounts.requester;
+        let system_program = &ctx.accounts.system_program;
+
+        let instructions = ctx
+            .accounts
+            .instructions
+            .as_ref()
+            .ok_or(ChainSignaturesError::MissingInstructionSysvar)?;
+        let current_index =
+            anchor_lang::solana_program::sysvar::instructions::load_current_index_checked(
+                instructions,
+            )?;
+
+        let predecessor = if current_index > 0 {
+            let caller_instruction =
+                anchor_lang::solana_program::sysvar::instructions::load_instruction_at_checked(
+                    (current_index - 1) as usize,
+                    instructions,
+                )?;
+            caller_instruction.program_id
+        } else {
+            *requester.key
+        };
+
+        let payer = match &ctx.accounts.fee_payer {
+            Some(fee_payer) => fee_payer.to_account_info(),
+            None => requester.to_account_info(),
+        };
+
+        require!(
+            payer.lamports() >= program_state.signature_deposit,
+            ChainSignaturesError::InsufficientDeposit
+        );
+
+        require!(
+            !transaction.is_empty(),
+            ChainSignaturesError::InvalidTransaction
+        );
+
+        let transfer_instruction = anchor_lang::system_program::Transfer {
+            from: payer,
+            to: program_state.to_account_info(),
+        };
+
+        anchor_lang::system_program::transfer(
+            CpiContext::new(system_program.to_account_info(), transfer_instruction),
+            program_state.signature_deposit,
+        )?;
+
+        emit!(SignRespondRequestedEvent {
+            predecessor,
+            sender: *requester.key,
+            transaction_data: transaction,
+            slip44_chain_id,
+            key_version,
+            deposit: program_state.signature_deposit,
+            path,
+            algo,
+            dest,
+            params,
+            deserialization_format: deserialization_format as u8,
+            deserialization_schema,
+            serialization_format: serialization_format as u8,
+            serialization_schema,
             fee_payer: match &ctx.accounts.fee_payer {
                 Some(payer) => Some(*payer.key),
                 None => None,
@@ -210,6 +305,18 @@ pub struct Sign<'info> {
 }
 
 #[derive(Accounts)]
+pub struct SignRespond<'info> {
+    #[account(mut, seeds = [b"program-state"], bump)]
+    pub program_state: Account<'info, ProgramState>,
+    #[account(mut)]
+    pub requester: Signer<'info>,
+    #[account(mut)]
+    pub fee_payer: Option<Signer<'info>>,
+    pub system_program: Program<'info, System>,
+    pub instructions: Option<AccountInfo<'info>>,
+}
+
+#[derive(Accounts)]
 pub struct Respond<'info> {
     pub responder: Signer<'info>,
 }
@@ -226,6 +333,32 @@ pub struct SignatureRequestedEvent {
     pub dest: String,
     pub params: String,
     pub fee_payer: Option<Pubkey>,
+}
+
+#[event]
+pub struct SignRespondRequestedEvent {
+    pub predecessor: Pubkey,
+    pub sender: Pubkey,
+    pub transaction_data: Vec<u8>,
+    pub slip44_chain_id: u32,
+    pub key_version: u32,
+    pub deposit: u64,
+    pub path: String,
+    pub algo: String,
+    pub dest: String,
+    pub params: String,
+    pub deserialization_format: u8,
+    pub deserialization_schema: Vec<u8>,
+    pub serialization_format: u8,
+    pub serialization_schema: Vec<u8>,
+    pub fee_payer: Option<Pubkey>,
+}
+
+#[event]
+pub struct SignatureErrorEvent {
+    pub request_id: [u8; 32],
+    pub responder: Pubkey,
+    pub error: String,
 }
 
 #[event]
@@ -259,4 +392,8 @@ pub enum ChainSignaturesError {
     InsufficientFunds,
     #[msg("Invalid recipient address")]
     InvalidRecipient,
+    #[msg("Invalid transaction data")]
+    InvalidTransaction,
+    #[msg("Missing instruction sysvar")]
+    MissingInstructionSysvar,
 }
