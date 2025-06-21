@@ -9,7 +9,7 @@ edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "lib"]
-name = "chain_signatures_project"
+name = "chain_signatures"
 
 [features]
 default = []
