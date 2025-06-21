@@ -1,5 +1,5 @@
 [package]
-name = "signet"
+name = "chain-signatures"
 version = "0.1.0"
 description = "Chain signatures program for cross-chain signing on Solana"
 authors = ["Your Name <your.email@example.com>"]
