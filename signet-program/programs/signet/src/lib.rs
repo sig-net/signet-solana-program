@@ -115,17 +115,17 @@ pub mod chain_signatures_project {
 
     pub fn sign_respond(
         ctx: Context<SignRespond>,
-        transaction: Vec<u8>,
+        serialized_transaction: Vec<u8>,
         slip44_chain_id: u32,
         key_version: u32,
         path: String,
         algo: String,
         dest: String,
         params: String,
-        deserialization_format: SerializationFormat,
-        deserialization_schema: Vec<u8>,
-        serialization_format: SerializationFormat,
-        serialization_schema: Vec<u8>,
+        explorer_deserialization_format: SerializationFormat,
+        explorer_deserialization_schema: Vec<u8>,
+        callback_serialization_format: SerializationFormat,
+        callback_serialization_schema: Vec<u8>,
     ) -> Result<()> {
         let program_state = &ctx.accounts.program_state;
         let requester = &ctx.accounts.requester;
@@ -163,7 +163,7 @@ pub mod chain_signatures_project {
         );
 
         require!(
-            !transaction.is_empty(),
+            !serialized_transaction.is_empty(),
             ChainSignaturesError::InvalidTransaction
         );
 
@@ -180,7 +180,7 @@ pub mod chain_signatures_project {
         emit!(SignRespondRequestedEvent {
             predecessor,
             sender: *requester.key,
-            transaction_data: transaction,
+            transaction_data: serialized_transaction,
             slip44_chain_id,
             key_version,
             deposit: program_state.signature_deposit,
@@ -188,14 +188,10 @@ pub mod chain_signatures_project {
             algo,
             dest,
             params,
-            deserialization_format: deserialization_format as u8,
-            deserialization_schema,
-            serialization_format: serialization_format as u8,
-            serialization_schema,
-            fee_payer: match &ctx.accounts.fee_payer {
-                Some(payer) => Some(*payer.key),
-                None => None,
-            },
+            explorer_deserialization_format: explorer_deserialization_format as u8,
+            explorer_deserialization_schema,
+            callback_serialization_format: callback_serialization_format as u8,
+            callback_serialization_schema
         });
 
         Ok(())
@@ -347,11 +343,10 @@ pub struct SignRespondRequestedEvent {
     pub algo: String,
     pub dest: String,
     pub params: String,
-    pub deserialization_format: u8,
-    pub deserialization_schema: Vec<u8>,
-    pub serialization_format: u8,
-    pub serialization_schema: Vec<u8>,
-    pub fee_payer: Option<Pubkey>,
+    pub explorer_deserialization_format: u8,
+    pub explorer_deserialization_schema: Vec<u8>,
+    pub callback_serialization_format: u8,
+    pub callback_serialization_schema: Vec<u8>
 }
 
 #[event]
