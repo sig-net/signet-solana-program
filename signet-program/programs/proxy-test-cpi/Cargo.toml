@@ -19,5 +19,5 @@ idl-build = ["anchor-lang/idl-build"]
 
 [dependencies]
 anchor-lang = { version = "0.31.1", features = ["event-cpi"] }
-signet = { path = "../signet", features = ["cpi"] }
+chain-signatures = { path = "../signet", features = ["cpi"] }
 
