@@ -131,27 +131,6 @@ pub mod chain_signatures_project {
         let requester = &ctx.accounts.requester;
         let system_program = &ctx.accounts.system_program;
 
-        let instructions = ctx
-            .accounts
-            .instructions
-            .as_ref()
-            .ok_or(ChainSignaturesError::MissingInstructionSysvar)?;
-        let current_index =
-            anchor_lang::solana_program::sysvar::instructions::load_current_index_checked(
-                instructions,
-            )?;
-
-        let predecessor = if current_index > 0 {
-            let caller_instruction =
-                anchor_lang::solana_program::sysvar::instructions::load_instruction_at_checked(
-                    (current_index - 1) as usize,
-                    instructions,
-                )?;
-            caller_instruction.program_id
-        } else {
-            *requester.key
-        };
-
         let payer = match &ctx.accounts.fee_payer {
             Some(fee_payer) => fee_payer.to_account_info(),
             None => requester.to_account_info(),
@@ -178,7 +157,6 @@ pub mod chain_signatures_project {
         )?;
 
         emit!(SignRespondRequestedEvent {
-            predecessor,
             sender: *requester.key,
             transaction_data: serialized_transaction,
             slip44_chain_id,
@@ -214,6 +192,30 @@ pub mod chain_signatures_project {
                 signature: signatures[i].clone(),
             });
         }
+
+        Ok(())
+    }
+
+    pub fn read_respond(
+        ctx: Context<ReadRespond>,
+        request_id: [u8; 32],
+        serialized_output: Vec<u8>,
+        signature: Signature,
+    ) -> Result<()> {
+        // The signature should be an ECDSA signature over keccak256(request_id || serialized_output)
+
+        
+        // only possible error responses // (this tx could never happen):
+        // - nonce too low
+        // - balance too low
+        // - literal on chain error
+
+        emit!(ReadRespondedEvent {
+            request_id,
+            responder: *ctx.accounts.responder.key,
+            serialized_output,
+            signature,
+        });
 
         Ok(())
     }
@@ -317,6 +319,11 @@ pub struct Respond<'info> {
     pub responder: Signer<'info>,
 }
 
+#[derive(Accounts)]
+pub struct ReadRespond<'info> {
+    pub responder: Signer<'info>,
+}
+
 #[event]
 pub struct SignatureRequestedEvent {
     pub sender: Pubkey,
@@ -333,7 +340,6 @@ pub struct SignatureRequestedEvent {
 
 #[event]
 pub struct SignRespondRequestedEvent {
-    pub predecessor: Pubkey,
     pub sender: Pubkey,
     pub transaction_data: Vec<u8>,
     pub slip44_chain_id: u32,
@@ -346,7 +352,7 @@ pub struct SignRespondRequestedEvent {
     pub explorer_deserialization_format: u8,
     pub explorer_deserialization_schema: Vec<u8>,
     pub callback_serialization_format: u8,
-    pub callback_serialization_schema: Vec<u8>
+    pub callback_serialization_schema: Vec<u8>,
 }
 
 #[event]
@@ -360,6 +366,14 @@ pub struct SignatureErrorEvent {
 pub struct SignatureRespondedEvent {
     pub request_id: [u8; 32],
     pub responder: Pubkey,
+    pub signature: Signature,
+}
+
+#[event]
+pub struct ReadRespondedEvent {
+    pub request_id: [u8; 32],
+    pub responder: Pubkey,
+    pub serialized_output: Vec<u8>,
     pub signature: Signature,
 }
 

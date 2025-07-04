@@ -2,7 +2,7 @@
   "address": "4uvZW8K4g4jBg7dzPNbb9XDxJLFBK7V6iC76uofmYvEU",
   "metadata": {
     "name": "chain_signatures_project",
-    "version": "0.1.0",
+    "version": "0.1.2",
     "spec": "0.1.0",
     "description": "SigNet program to request signatures from the network"
   },
@@ -39,6 +39,36 @@
         {
           "name": "signature_deposit",
           "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "read_respond",
+      "discriminator": [250, 9, 163, 167, 41, 67, 181, 182],
+      "accounts": [
+        {
+          "name": "responder",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "request_id",
+          "type": {
+            "array": ["u8", 32]
+          }
+        },
+        {
+          "name": "serialized_output",
+          "type": "bytes"
+        },
+        {
+          "name": "signature",
+          "type": {
+            "defined": {
+              "name": "Signature"
+            }
+          }
         }
       ]
     },
@@ -153,6 +183,99 @@
       ]
     },
     {
+      "name": "sign_respond",
+      "discriminator": [67, 108, 87, 191, 44, 180, 46, 45],
+      "accounts": [
+        {
+          "name": "program_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112, 114, 111, 103, 114, 97, 109, 45, 115, 116, 97, 116, 101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "requester",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "fee_payer",
+          "writable": true,
+          "signer": true,
+          "optional": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "instructions",
+          "optional": true
+        }
+      ],
+      "args": [
+        {
+          "name": "serialized_transaction",
+          "type": "bytes"
+        },
+        {
+          "name": "slip44_chain_id",
+          "type": "u32"
+        },
+        {
+          "name": "key_version",
+          "type": "u32"
+        },
+        {
+          "name": "path",
+          "type": "string"
+        },
+        {
+          "name": "algo",
+          "type": "string"
+        },
+        {
+          "name": "dest",
+          "type": "string"
+        },
+        {
+          "name": "params",
+          "type": "string"
+        },
+        {
+          "name": "explorer_deserialization_format",
+          "type": {
+            "defined": {
+              "name": "SerializationFormat"
+            }
+          }
+        },
+        {
+          "name": "explorer_deserialization_schema",
+          "type": "bytes"
+        },
+        {
+          "name": "callback_serialization_format",
+          "type": {
+            "defined": {
+              "name": "SerializationFormat"
+            }
+          }
+        },
+        {
+          "name": "callback_serialization_schema",
+          "type": "bytes"
+        }
+      ]
+    },
+    {
       "name": "update_deposit",
       "discriminator": [126, 116, 15, 164, 238, 179, 155, 59],
       "accounts": [
@@ -246,6 +369,18 @@
       "discriminator": [86, 232, 194, 4, 211, 69, 172, 202]
     },
     {
+      "name": "ReadRespondedEvent",
+      "discriminator": [38, 24, 41, 249, 9, 133, 164, 204]
+    },
+    {
+      "name": "SignRespondRequestedEvent",
+      "discriminator": [30, 12, 56, 70, 97, 168, 45, 32]
+    },
+    {
+      "name": "SignatureErrorEvent",
+      "discriminator": [42, 28, 210, 105, 9, 196, 189, 51]
+    },
+    {
       "name": "SignatureRequestedEvent",
       "discriminator": [171, 129, 105, 91, 154, 49, 160, 34]
     },
@@ -279,6 +414,16 @@
       "code": 6004,
       "name": "InvalidRecipient",
       "msg": "Invalid recipient address"
+    },
+    {
+      "code": 6005,
+      "name": "InvalidTransaction",
+      "msg": "Invalid transaction data"
+    },
+    {
+      "code": 6006,
+      "name": "MissingInstructionSysvar",
+      "msg": "Missing instruction sysvar"
     }
   ],
   "types": [
@@ -351,6 +496,117 @@
       }
     },
     {
+      "name": "ReadRespondedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "request_id",
+            "type": {
+              "array": ["u8", 32]
+            }
+          },
+          {
+            "name": "responder",
+            "type": "pubkey"
+          },
+          {
+            "name": "serialized_output",
+            "type": "bytes"
+          },
+          {
+            "name": "signature",
+            "type": {
+              "defined": {
+                "name": "Signature"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "SerializationFormat",
+      "repr": {
+        "kind": "rust"
+      },
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Borsh"
+          },
+          {
+            "name": "AbiJson"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SignRespondRequestedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "predecessor",
+            "type": "pubkey"
+          },
+          {
+            "name": "sender",
+            "type": "pubkey"
+          },
+          {
+            "name": "transaction_data",
+            "type": "bytes"
+          },
+          {
+            "name": "slip44_chain_id",
+            "type": "u32"
+          },
+          {
+            "name": "key_version",
+            "type": "u32"
+          },
+          {
+            "name": "deposit",
+            "type": "u64"
+          },
+          {
+            "name": "path",
+            "type": "string"
+          },
+          {
+            "name": "algo",
+            "type": "string"
+          },
+          {
+            "name": "dest",
+            "type": "string"
+          },
+          {
+            "name": "params",
+            "type": "string"
+          },
+          {
+            "name": "explorer_deserialization_format",
+            "type": "u8"
+          },
+          {
+            "name": "explorer_deserialization_schema",
+            "type": "bytes"
+          },
+          {
+            "name": "callback_serialization_format",
+            "type": "u8"
+          },
+          {
+            "name": "callback_serialization_schema",
+            "type": "bytes"
+          }
+        ]
+      }
+    },
+    {
       "name": "Signature",
       "type": {
         "kind": "struct",
@@ -372,6 +628,28 @@
           {
             "name": "recovery_id",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SignatureErrorEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "request_id",
+            "type": {
+              "array": ["u8", 32]
+            }
+          },
+          {
+            "name": "responder",
+            "type": "pubkey"
+          },
+          {
+            "name": "error",
+            "type": "string"
           }
         ]
       }
