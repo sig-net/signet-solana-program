@@ -9,6 +9,7 @@ export interface PendingTransaction {
   sender: string;
   path: string;
   fromAddress: string;
+  nonce: number;
 }
 
 export interface ProcessedTransaction {
@@ -17,9 +18,17 @@ export interface ProcessedTransaction {
   signature: any;
   signedTransaction: string;
   fromAddress: string;
+  nonce: number;
 }
 
 export interface TransactionOutput {
   success: boolean;
   output: any;
+}
+
+export interface TransactionStatus {
+  status: "pending" | "success" | "error" | "fatal_error";
+  success?: boolean;
+  output?: any;
+  reason?: string;
 }

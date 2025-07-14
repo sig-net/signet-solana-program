@@ -1,6 +1,6 @@
 import { ethers } from "ethers";
 import { CONFIG } from "./config";
-import { TransactionOutput } from "./types";
+import { TransactionOutput, TransactionStatus } from "./types";
 
 export class EthereumMonitor {
   static async waitForTransactionAndGetOutput(
@@ -8,47 +8,71 @@ export class EthereumMonitor {
     slip44ChainId: number,
     explorerDeserializationFormat: number,
     explorerDeserializationSchema: any,
-    fromAddress: string
-  ): Promise<TransactionOutput> {
-    const provider = this.getProvider(slip44ChainId);
+    fromAddress: string,
+    nonce: number
+  ): Promise<TransactionStatus> {
+    let provider: ethers.JsonRpcProvider;
+
+    try {
+      provider = this.getProvider(slip44ChainId);
+    } catch (e) {
+      return { status: "fatal_error", reason: "unsupported_chain" };
+    }
 
     console.log(`⏳ Checking transaction ${txHash}...`);
 
     const tx = await provider.getTransaction(txHash);
     if (!tx) {
-      throw new Error("Transaction not found");
+      const currentNonce = await provider.getTransactionCount(fromAddress);
+      if (currentNonce > nonce) {
+        return { status: "error", reason: "replaced" };
+      }
+      return { status: "pending" };
     }
 
     console.log(`✅ Transaction found! Waiting for confirmation...`);
 
-    const receipt = await provider.waitForTransaction(
-      txHash,
-      1,
-      CONFIG.TX_TIMEOUT_MS
-    );
-    if (!receipt) {
-      throw new Error("Transaction receipt not found");
+    try {
+      const receipt = await provider.waitForTransaction(
+        txHash,
+        1,
+        CONFIG.POLL_INTERVAL_MS
+      );
+      if (!receipt) {
+        return { status: "pending" };
+      }
+
+      console.log(`  📦 Block number: ${receipt.blockNumber}`);
+      console.log(
+        `  ${receipt.status === 1 ? "✅" : "❌"} Status: ${
+          receipt.status === 1 ? "Success" : "Failed"
+        }`
+      );
+
+      if (receipt.status === 0) {
+        return { status: "error", reason: "reverted" };
+      }
+
+      try {
+        const output = await this.extractTransactionOutput(
+          tx,
+          receipt,
+          provider,
+          explorerDeserializationFormat,
+          explorerDeserializationSchema,
+          fromAddress
+        );
+        return {
+          status: "success",
+          success: output.success,
+          output: output.output,
+        };
+      } catch (e) {
+        return { status: "fatal_error", reason: "extraction_failed" };
+      }
+    } catch (e) {
+      return { status: "pending" };
     }
-
-    console.log(`  📦 Block number: ${receipt.blockNumber}`);
-    console.log(
-      `  ${receipt.status === 1 ? "✅" : "❌"} Status: ${
-        receipt.status === 1 ? "Success" : "Failed"
-      }`
-    );
-
-    if (receipt.status === 0) {
-      return { success: false, output: null };
-    }
-
-    return await this.extractTransactionOutput(
-      tx,
-      receipt,
-      provider,
-      explorerDeserializationFormat,
-      explorerDeserializationSchema,
-      fromAddress
-    );
   }
 
   private static getProvider(slip44ChainId: number): ethers.JsonRpcProvider {
@@ -56,7 +80,7 @@ export class EthereumMonitor {
     const isDevnet = rpcUrl.includes("devnet");
 
     switch (slip44ChainId) {
-        case 60: // Ethereum
+      case 60: // Ethereum
         if (isDevnet) {
           const url =
             process.env.SEPOLIA_RPC_URL ||

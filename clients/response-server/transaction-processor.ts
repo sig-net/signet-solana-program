@@ -1,4 +1,3 @@
-
 import { ethers } from "ethers";
 import { CONFIG } from "./config";
 import { CryptoUtils } from "./crypto-utils";
@@ -30,6 +29,8 @@ export class TransactionProcessor {
 
     // Decode and prepare signed transaction
     const decoded = ethers.decodeRlp(rlpData) as string[];
+    const nonce = parseInt(decoded[0], 16); // First field is always nonce
+    console.log("  📝 Transaction nonce:", nonce);
     const vValue = isEIP1559 ? signature.v - 27 : signature.v;
 
     const signedFields = [
@@ -62,6 +63,7 @@ export class TransactionProcessor {
       signature: solanaSignature,
       signedTransaction: ethers.hexlify(signedTransaction),
       fromAddress: wallet.address,
+      nonce,
     };
   }
 
