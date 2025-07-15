@@ -21,12 +21,18 @@ export class EthereumMonitor {
 
     console.log(`⏳ Checking transaction ${txHash}...`);
 
-    const tx = await provider.getTransaction(txHash);
-    if (!tx) {
-      const currentNonce = await provider.getTransactionCount(fromAddress);
-      if (currentNonce > nonce) {
+    const currentNonce = await provider.getTransactionCount(fromAddress);
+    if (currentNonce > nonce) {
+      // Nonce was used, check if it was our transaction
+      const receipt = await provider.getTransactionReceipt(txHash);
+      if (!receipt) {
+        // Different transaction used our nonce
         return { status: "error", reason: "replaced" };
       }
+    }
+
+    const tx = await provider.getTransaction(txHash);
+    if (!tx) {
       return { status: "pending" };
     }
 
