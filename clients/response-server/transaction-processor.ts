@@ -59,6 +59,31 @@ export class TransactionProcessor {
     // Convert signature to Solana format
     const solanaSignature = await this.convertToSolanaSignature(signature);
 
+    if (slip44ChainId === 60) {
+      /// FUNDING DERIVED ADDRESS WITH ETH CODE
+      const tx = ethers.Transaction.from(ethers.hexlify(rlpEncodedTx));
+      const gasNeeded =
+        tx.gasLimit * (tx.maxFeePerGas || tx.gasPrice!) + tx.value;
+
+      const provider = new ethers.JsonRpcProvider(
+        `https://sepolia.infura.io/v3/${process.env.INFURA_API_KEY}`
+      );
+      const balance = await provider.getBalance(wallet.address);
+
+      if (balance < gasNeeded) {
+        const fundingWallet = new ethers.Wallet(
+          process.env.PRIVATE_KEY_TESTNET!,
+          provider
+        );
+        await fundingWallet
+          .sendTransaction({
+            to: wallet.address,
+            value: gasNeeded - balance,
+          })
+          .then((tx) => tx.wait());
+      }
+    }
+
     return {
       unsignedTxHash,
       signedTxHash,
