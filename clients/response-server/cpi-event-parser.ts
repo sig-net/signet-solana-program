@@ -158,7 +158,7 @@ export class CpiEventParser {
   ): number {
     return connection.onLogs(
       program.programId,
-      async (logs) => {
+      async (logs, context) => {
         // Skip failed transactions - CPI events require valid transactions
         if (logs.err) {
           return;
@@ -176,7 +176,8 @@ export class CpiEventParser {
         for (const event of events) {
           const handler = eventHandlers.get(event.name);
           if (handler) {
-            await handler(event.data, logs.context.slot);
+            // Use the slot from context
+            await handler(event.data, context.slot);
           }
         }
       },

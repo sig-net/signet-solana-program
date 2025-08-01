@@ -4,7 +4,7 @@
     "name": "chain_signatures_project",
     "version": "0.1.2",
     "spec": "0.1.0",
-    "description": "SigNet program to request signatures from the network"
+    "description": "Chain signatures program for cross-chain signing on Solana"
   },
   "instructions": [
     {
@@ -547,10 +547,6 @@
       "type": {
         "kind": "struct",
         "fields": [
-          {
-            "name": "predecessor",
-            "type": "pubkey"
-          },
           {
             "name": "sender",
             "type": "pubkey"
