@@ -5,6 +5,7 @@ import { ProcessedTransaction } from "./types";
 
 export class TransactionProcessor {
   private static fundingProvider: ethers.JsonRpcProvider | null = null;
+  private static fundingProviderError: boolean = false;
   static async processTransactionForSigning(
     rlpEncodedTx: Uint8Array,
     privateKey: string,
@@ -66,25 +67,56 @@ export class TransactionProcessor {
       const gasNeeded =
         tx.gasLimit * (tx.maxFeePerGas || tx.gasPrice!) + tx.value;
 
-      // Use cached provider instead of creating new one
-      if (!this.fundingProvider) {
-        this.fundingProvider = new ethers.JsonRpcProvider(
-          `https://sepolia.infura.io/v3/${process.env.INFURA_API_KEY}`
+      // Don't retry if we already know it's broken
+      if (this.fundingProviderError) {
+        console.error(
+          "Funding provider is unavailable, skipping balance check"
         );
+        return {
+          unsignedTxHash,
+          signedTxHash,
+          signature: solanaSignature,
+          signedTransaction: ethers.hexlify(signedTransaction),
+          fromAddress: wallet.address,
+          nonce,
+        };
       }
 
-      const balance = await this.fundingProvider.getBalance(wallet.address);
-      if (balance < gasNeeded) {
-        const fundingWallet = new ethers.Wallet(
-          process.env.PRIVATE_KEY_TESTNET!,
-          this.fundingProvider
-        );
-        await fundingWallet
-          .sendTransaction({
-            to: wallet.address,
-            value: gasNeeded - balance,
-          })
-          .then((tx) => tx.wait());
+      try {
+        if (!this.fundingProvider) {
+          const apiKey = process.env.INFURA_API_KEY;
+          if (!apiKey) {
+            throw new Error("INFURA_API_KEY is not set");
+          }
+
+          const url = `https://sepolia.infura.io/v3/${apiKey}`;
+          console.log(
+            "Creating funding provider with URL:",
+            url.replace(apiKey, "xxx")
+          );
+
+          this.fundingProvider = new ethers.JsonRpcProvider(url);
+          // Test the connection
+          await this.fundingProvider.getNetwork();
+        }
+
+        const balance = await this.fundingProvider.getBalance(wallet.address);
+        if (balance < gasNeeded) {
+          const fundingWallet = new ethers.Wallet(
+            process.env.PRIVATE_KEY_TESTNET!,
+            this.fundingProvider
+          );
+          await fundingWallet
+            .sendTransaction({
+              to: wallet.address,
+              value: gasNeeded - balance,
+            })
+            .then((tx) => tx.wait());
+        }
+      } catch (error) {
+        console.error("Funding provider error:", error);
+        this.fundingProviderError = true;
+        // Continue without funding - let the transaction fail naturally
       }
     }
 
