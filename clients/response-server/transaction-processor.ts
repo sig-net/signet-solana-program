@@ -11,7 +11,7 @@ export class TransactionProcessor {
     privateKey: string,
     slip44ChainId: number
   ): Promise<ProcessedTransaction> {
-    console.log("\n🔐 Processing Transaction for Signing");
+    console.log("\n🔐 Processing the Transaction for Signing");
     console.log("  📋 RLP-encoded transaction:", ethers.hexlify(rlpEncodedTx));
     console.log("  🔢 SLIP-44 Chain ID:", slip44ChainId);
 
