@@ -10,6 +10,7 @@ export interface PendingTransaction {
   path: string;
   fromAddress: string;
   nonce: number;
+  checkCount: number;
 }
 
 export interface ProcessedTransaction {

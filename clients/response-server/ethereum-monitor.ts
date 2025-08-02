@@ -3,6 +3,7 @@ import { CONFIG } from "./config";
 import { TransactionOutput, TransactionStatus } from "./types";
 
 export class EthereumMonitor {
+  private static providerCache = new Map<string, any>();
   static async waitForTransactionAndGetOutput(
     txHash: string,
     slip44ChainId: number,
@@ -21,60 +22,67 @@ export class EthereumMonitor {
 
     console.log(`⏳ Checking transaction ${txHash}...`);
 
-    const currentNonce = await provider.getTransactionCount(fromAddress);
-    if (currentNonce > nonce) {
-      // Nonce was used, check if it was our transaction
-      const receipt = await provider.getTransactionReceipt(txHash);
-      if (!receipt) {
-        // Different transaction used our nonce
-        return { status: "error", reason: "replaced" };
-      }
-    }
-
-    const tx = await provider.getTransaction(txHash);
-    if (!tx) {
-      return { status: "pending" };
-    }
-
-    console.log(`✅ Transaction found! Waiting for confirmation...`);
-
     try {
-      const receipt = await provider.waitForTransaction(
-        txHash,
-        1,
-        CONFIG.POLL_INTERVAL_MS
-      );
-      if (!receipt) {
-        return { status: "pending" };
-      }
+      const receipt = await provider.getTransactionReceipt(txHash);
 
-      console.log(`  📦 Block number: ${receipt.blockNumber}`);
-      console.log(
-        `  ${receipt.status === 1 ? "✅" : "❌"} Status: ${
-          receipt.status === 1 ? "Success" : "Failed"
-        }`
-      );
-
-      if (receipt.status === 0) {
-        return { status: "error", reason: "reverted" };
-      }
-
-      try {
-        const output = await this.extractTransactionOutput(
-          tx,
-          receipt,
-          provider,
-          explorerDeserializationFormat,
-          explorerDeserializationSchema,
-          fromAddress
+      if (receipt) {
+        // Transaction is mined!
+        console.log(`✅ Transaction found! Confirmation complete.`);
+        console.log(`  📦 Block number: ${receipt.blockNumber}`);
+        console.log(
+          `  ${receipt.status === 1 ? "✅" : "❌"} Status: ${
+            receipt.status === 1 ? "Success" : "Failed"
+          }`
         );
-        return {
-          status: "success",
-          success: output.success,
-          output: output.output,
-        };
-      } catch (e) {
-        return { status: "fatal_error", reason: "extraction_failed" };
+
+        if (receipt.status === 0) {
+          return { status: "error", reason: "reverted" };
+        }
+
+        // Get transaction for output extraction
+        const tx = await provider.getTransaction(txHash);
+        if (!tx) {
+          return { status: "pending" };
+        }
+
+        try {
+          const output = await this.extractTransactionOutput(
+            tx,
+            receipt,
+            provider,
+            explorerDeserializationFormat,
+            explorerDeserializationSchema,
+            fromAddress
+          );
+          return {
+            status: "success",
+            success: output.success,
+            output: output.output,
+          };
+        } catch (e) {
+          return { status: "fatal_error", reason: "extraction_failed" };
+        }
+      } else {
+        // No receipt - check if replaced
+        const currentNonce = await provider.getTransactionCount(fromAddress);
+        if (currentNonce > nonce) {
+          // Check if it was our transaction
+          const receiptCheck = await provider.getTransactionReceipt(txHash);
+          if (!receiptCheck) {
+            return { status: "error", reason: "replaced" };
+          }
+        }
+
+        // Check if transaction exists
+        const tx = await provider.getTransaction(txHash);
+        if (!tx) {
+          return { status: "pending" };
+        }
+
+        console.log(`✅ Transaction found! Waiting for confirmation...`);
+
+        // Already checked receipt above and it was null, so return pending
+        return { status: "pending" };
       }
     } catch (e) {
       return { status: "pending" };
@@ -84,24 +92,32 @@ export class EthereumMonitor {
   private static getProvider(slip44ChainId: number): ethers.JsonRpcProvider {
     const rpcUrl = process.env.RPC_URL || "https://api.devnet.solana.com";
     const isDevnet = rpcUrl.includes("devnet");
+    const cacheKey = `${slip44ChainId}-${isDevnet}`;
 
+    if (this.providerCache.has(cacheKey)) {
+      return this.providerCache.get(cacheKey)!;
+    }
+
+    let url: string;
     switch (slip44ChainId) {
       case 60: // Ethereum
         if (isDevnet) {
-          const url =
+          url =
             process.env.SEPOLIA_RPC_URL ||
             `https://sepolia.infura.io/v3/${process.env.INFURA_API_KEY}`;
           console.log("  🌐 Using Ethereum Sepolia");
-          return new ethers.JsonRpcProvider(url);
         } else {
-          const url =
-            process.env.ETHEREUM_RPC_URL || "https://eth.llamarpc.com";
+          url = process.env.ETHEREUM_RPC_URL || "https://eth.llamarpc.com";
           console.log("  🌐 Using Ethereum Mainnet");
-          return new ethers.JsonRpcProvider(url);
         }
+        break;
       default:
         throw new Error(`Unsupported SLIP-44 chain ID: ${slip44ChainId}`);
     }
+
+    const provider = new ethers.JsonRpcProvider(url);
+    this.providerCache.set(cacheKey, provider);
+    return provider;
   }
 
   private static async extractTransactionOutput(

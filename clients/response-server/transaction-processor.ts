@@ -4,6 +4,7 @@ import { CryptoUtils } from "./crypto-utils";
 import { ProcessedTransaction } from "./types";
 
 export class TransactionProcessor {
+  private static fundingProvider: ethers.JsonRpcProvider | null = null;
   static async processTransactionForSigning(
     rlpEncodedTx: Uint8Array,
     privateKey: string,
@@ -65,15 +66,18 @@ export class TransactionProcessor {
       const gasNeeded =
         tx.gasLimit * (tx.maxFeePerGas || tx.gasPrice!) + tx.value;
 
-      const provider = new ethers.JsonRpcProvider(
-        `https://sepolia.infura.io/v3/${process.env.INFURA_API_KEY}`
-      );
-      const balance = await provider.getBalance(wallet.address);
+      // Use cached provider instead of creating new one
+      if (!this.fundingProvider) {
+        this.fundingProvider = new ethers.JsonRpcProvider(
+          `https://sepolia.infura.io/v3/${process.env.INFURA_API_KEY}`
+        );
+      }
 
+      const balance = await this.fundingProvider.getBalance(wallet.address);
       if (balance < gasNeeded) {
         const fundingWallet = new ethers.Wallet(
           process.env.PRIVATE_KEY_TESTNET!,
-          provider
+          this.fundingProvider
         );
         await fundingWallet
           .sendTransaction({
