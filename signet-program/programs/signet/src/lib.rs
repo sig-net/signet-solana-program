@@ -156,7 +156,7 @@ pub mod chain_signatures_project {
             program_state.signature_deposit,
         )?;
 
-        emit!(SignRespondRequestedEvent {
+        emit_cpi!(SignRespondRequestedEvent {
             sender: *requester.key,
             transaction_data: serialized_transaction,
             slip44_chain_id,
@@ -204,7 +204,6 @@ pub mod chain_signatures_project {
     ) -> Result<()> {
         // The signature should be an ECDSA signature over keccak256(request_id || serialized_output)
 
-        
         // only possible error responses // (this tx could never happen):
         // - nonce too low
         // - balance too low
@@ -302,6 +301,7 @@ pub struct Sign<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[event_cpi]
 #[derive(Accounts)]
 pub struct SignRespond<'info> {
     #[account(mut, seeds = [b"program-state"], bump)]

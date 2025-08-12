@@ -1,6 +1,6 @@
 [package]
 name = "chain-signatures"
-version = "0.1.2"
+version = "0.1.3"
 description = "Chain signatures program for cross-chain signing on Solana"
 authors = ["Your Name <your.email@example.com>"]
 license = "MIT"
