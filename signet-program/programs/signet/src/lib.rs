@@ -3,6 +3,13 @@ use anchor_lang::prelude::*;
 
 declare_id!("4uvZW8K4g4jBg7dzPNbb9XDxJLFBK7V6iC76uofmYvEU");
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq)]
+#[repr(u8)]
+pub enum SerializationFormat {
+    Borsh = 0,
+    AbiJson = 1,
+}
+
 #[program]
 pub mod chain_signatures_project {
     use super::*;
@@ -106,6 +113,68 @@ pub mod chain_signatures_project {
         Ok(())
     }
 
+    pub fn sign_respond(
+        ctx: Context<SignRespond>,
+        serialized_transaction: Vec<u8>,
+        slip44_chain_id: u32,
+        key_version: u32,
+        path: String,
+        algo: String,
+        dest: String,
+        params: String,
+        explorer_deserialization_format: SerializationFormat,
+        explorer_deserialization_schema: Vec<u8>,
+        callback_serialization_format: SerializationFormat,
+        callback_serialization_schema: Vec<u8>,
+    ) -> Result<()> {
+        let program_state = &ctx.accounts.program_state;
+        let requester = &ctx.accounts.requester;
+        let system_program = &ctx.accounts.system_program;
+
+        let payer = match &ctx.accounts.fee_payer {
+            Some(fee_payer) => fee_payer.to_account_info(),
+            None => requester.to_account_info(),
+        };
+
+        require!(
+            payer.lamports() >= program_state.signature_deposit,
+            ChainSignaturesError::InsufficientDeposit
+        );
+
+        require!(
+            !serialized_transaction.is_empty(),
+            ChainSignaturesError::InvalidTransaction
+        );
+
+        let transfer_instruction = anchor_lang::system_program::Transfer {
+            from: payer,
+            to: program_state.to_account_info(),
+        };
+
+        anchor_lang::system_program::transfer(
+            CpiContext::new(system_program.to_account_info(), transfer_instruction),
+            program_state.signature_deposit,
+        )?;
+
+        emit_cpi!(SignRespondRequestedEvent {
+            sender: *requester.key,
+            transaction_data: serialized_transaction,
+            slip44_chain_id,
+            key_version,
+            deposit: program_state.signature_deposit,
+            path,
+            algo,
+            dest,
+            params,
+            explorer_deserialization_format: explorer_deserialization_format as u8,
+            explorer_deserialization_schema,
+            callback_serialization_format: callback_serialization_format as u8,
+            callback_serialization_schema
+        });
+
+        Ok(())
+    }
+
     pub fn respond(
         ctx: Context<Respond>,
         request_ids: Vec<[u8; 32]>,
@@ -123,6 +192,29 @@ pub mod chain_signatures_project {
                 signature: signatures[i].clone(),
             });
         }
+
+        Ok(())
+    }
+
+    pub fn read_respond(
+        ctx: Context<ReadRespond>,
+        request_id: [u8; 32],
+        serialized_output: Vec<u8>,
+        signature: Signature,
+    ) -> Result<()> {
+        // The signature should be an ECDSA signature over keccak256(request_id || serialized_output)
+
+        // only possible error responses // (this tx could never happen):
+        // - nonce too low
+        // - balance too low
+        // - literal on chain error
+
+        emit!(ReadRespondedEvent {
+            request_id,
+            responder: *ctx.accounts.responder.key,
+            serialized_output,
+            signature,
+        });
 
         Ok(())
     }
@@ -209,8 +301,26 @@ pub struct Sign<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[event_cpi]
+#[derive(Accounts)]
+pub struct SignRespond<'info> {
+    #[account(mut, seeds = [b"program-state"], bump)]
+    pub program_state: Account<'info, ProgramState>,
+    #[account(mut)]
+    pub requester: Signer<'info>,
+    #[account(mut)]
+    pub fee_payer: Option<Signer<'info>>,
+    pub system_program: Program<'info, System>,
+    pub instructions: Option<AccountInfo<'info>>,
+}
+
 #[derive(Accounts)]
 pub struct Respond<'info> {
+    pub responder: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct ReadRespond<'info> {
     pub responder: Signer<'info>,
 }
 
@@ -229,9 +339,41 @@ pub struct SignatureRequestedEvent {
 }
 
 #[event]
+pub struct SignRespondRequestedEvent {
+    pub sender: Pubkey,
+    pub transaction_data: Vec<u8>,
+    pub slip44_chain_id: u32,
+    pub key_version: u32,
+    pub deposit: u64,
+    pub path: String,
+    pub algo: String,
+    pub dest: String,
+    pub params: String,
+    pub explorer_deserialization_format: u8,
+    pub explorer_deserialization_schema: Vec<u8>,
+    pub callback_serialization_format: u8,
+    pub callback_serialization_schema: Vec<u8>,
+}
+
+#[event]
+pub struct SignatureErrorEvent {
+    pub request_id: [u8; 32],
+    pub responder: Pubkey,
+    pub error: String,
+}
+
+#[event]
 pub struct SignatureRespondedEvent {
     pub request_id: [u8; 32],
     pub responder: Pubkey,
+    pub signature: Signature,
+}
+
+#[event]
+pub struct ReadRespondedEvent {
+    pub request_id: [u8; 32],
+    pub responder: Pubkey,
+    pub serialized_output: Vec<u8>,
     pub signature: Signature,
 }
 
@@ -259,4 +401,8 @@ pub enum ChainSignaturesError {
     InsufficientFunds,
     #[msg("Invalid recipient address")]
     InvalidRecipient,
+    #[msg("Invalid transaction data")]
+    InvalidTransaction,
+    #[msg("Missing instruction sysvar")]
+    MissingInstructionSysvar,
 }

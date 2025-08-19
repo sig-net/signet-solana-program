@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
-use chain_signatures_project::cpi::accounts::Sign as SignetSign;
-use chain_signatures_project::program::ChainSignaturesProject;
-use chain_signatures_project::ProgramState as SignetProgramState;
+use chain_signatures::cpi::accounts::Sign as SignetSign;
+use chain_signatures::program::ChainSignaturesProject;
+use chain_signatures::ProgramState as SignetProgramState;
 
 declare_id!("76SSSaQQjQ35d8shjHUsUNFwfpnJamVAiCN5hWzuF84f");
 
@@ -33,15 +33,7 @@ pub mod proxy_test_cpi {
         let cpi_program = ctx.accounts.signet_program.to_account_info();
         let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
 
-        chain_signatures_project::cpi::sign(
-            cpi_ctx,
-            payload,
-            key_version,
-            path,
-            algo,
-            dest,
-            params,
-        )?;
+        chain_signatures::cpi::sign(cpi_ctx, payload, key_version, path, algo, dest, params)?;
 
         msg!("Successfully called signet program via CPI");
         Ok(())
